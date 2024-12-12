@@ -1,0 +1,346 @@
+```{r}
+if(!require(pacman))
+  install.packages("pacman")
+
+pacman::p_load(ggplot2,
+               here,
+               readr,
+               gganimate, 
+               dplyr,
+               shiny,
+               gifski,
+               stringr,
+               ggridges,
+               ggstream,
+               GGally,
+               reshape2
+              )
+             
+
+```
+
+```{r}
+
+data <- read_csv(here("data.csv"))
+
+```
+
+```{r}
+# Load stringr for pattern matching
+
+
+# Filter out Attack_type values starting with MQTT, NMAP, Thing speak, or Wipro
+data <- data %>%
+  filter(flow_duration > 0,  # Filter for valid data
+         !str_starts(Attack_type, regex("^(MQTT|NMAP|Thing_speak|Wipro)", ignore_case = TRUE))) %>%
+  group_by(Attack_type) %>%
+  mutate(log_flow_duration = log10(flow_duration),
+         log_payload = log10(payload_bytes_per_second + 1))  # Log transformation for better scaling
+
+# Updated scatter plot without the specified Attack_type values
+animated_plot <- ggplot(data, aes(x = log_flow_duration, 
+                                  y = log_payload, 
+                                  color = Attack_type)) +
+  geom_point(alpha = 0.7) +
+  labs(title = "Unique Patterns of Attacks",
+       x = "Log of Flow Duration",
+       y = "Log of Payload (bytes per second)") +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  transition_states(Attack_type, transition_length = 2, state_length = 1) +
+  enter_fade() +
+  exit_shrink() +
+  ease_aes('linear')
+
+# Render and display animation in RStudio Viewer
+animate(animated_plot, nframes = 50, fps = 5, width = 400, height = 400, renderer = gifski_renderer())
+
+
+```
+This visualization answers the question by showing how different attack types exhibit unique patterns in bandwidth (log_payload) and flow characteristics (log_flow_duration). By comparing the positions and distributions of points across Attack_type states, you can identify:
+
+Which attacks are more bandwidth-intensive.
+Which attacks have longer or shorter flow durations.
+How these characteristics vary between attack types over time.
+
+
+The Log of Payload (bytes per second) on the y-axis provides insights into the amount of data being transmitted during the network flow, but it is transformed using a logarithmic scale. Here’s why and what it represents:
+
+What Does It Mean?
+Payload: This is the actual data (in bytes per second) being sent in the network traffic during an attack.
+
+A higher value indicates a more data-intensive attack.
+A lower value suggests a less data-intensive attack.
+Log Transformation:
+
+Taking the logarithm of payload values (e.g., log10(payload)) compresses the scale, making it easier to compare data that varies widely in magnitude.
+For example, without transformation, differences between attacks sending 10,000 bytes and 1,000,000 bytes would dominate the visualization, obscuring smaller differences. The log scale makes both large and small payloads easier to analyze together.
+
+What Can we Learn From It?
+
+Intensity of Attacks:
+
+Attacks with higher values on the y-axis have a greater data payload, meaning they could flood the network with more data.
+Lower values may represent reconnaissance or targeted attacks with minimal data transmission.
+Patterns Across Attack Types:
+
+Specific attack types might consistently occupy certain ranges on the y-axis, indicating their characteristic data payload.
+Combined With x-Axis (Flow Duration):
+
+High payload with long flow durations: Likely flooding attacks (e.g., DDoS).
+Low payload with short flow durations: Likely reconnaissance attacks (e.g., NMAP scans).
+
+Conclusion:
+
+The y-axis shows how much data each attack sends in a given time, but it’s adjusted so smaller and larger attacks are easier to compare. Attacks higher up on the graph are like loud, heavy traffic on the network, while lower ones are quieter and smaller in scale. Understanding thishelps us spot which attacks are overwhelming and which ones are sneakier but still dangerous.
+
+
+```{r}
+
+# Data transformation with filtering
+data <- data %>%
+  filter(flow_duration > 0) %>%  # Remove invalid flow durations
+  filter(!grepl("^(MQTT|NMAP|Thing_Speak|Wipro)", Attack_type, ignore.case = TRUE)) %>% # Remove specified attack types
+  mutate(
+    log_payload = log10(payload_bytes_per_second + 1),  # Log-transform payload
+    log_iat = log10(flow_iat.avg + 1),                 # Log-transform inter-arrival time
+    iat_bin = cut(log_iat, breaks = 5)                 # Bin inter-arrival time into ranges
+  )
+
+# Static ridge plot with inter-arrival bins
+ridge_plot <- ggplot(data, aes(x = log_payload, y = Attack_type, fill = Attack_type)) +
+  geom_density_ridges(alpha = 0.8, scale = 1) +
+  labs(
+    title = "Bandwidth vs. Inter-Arrival Time",
+    subtitle = "Evolving Bandwidth Distribution by Attack Type",
+    x = "Log of Bandwidth (bytes per second)",
+    y = "Attack Types"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Animated version of the ridge plot
+animated_ridge_plot <- ridge_plot +
+  transition_states(iat_bin, transition_length = 2, state_length = 1) +
+  labs(title = "Bandwidth Distribution Across Attack Types",
+       subtitle = "Inter-Arrival Time Range: {closest_state}",
+       x = "Log of Bandwidth (bytes per second)",
+       y = "Attack Types") +
+  enter_fade() +
+  exit_fade()
+
+# Render and display animation in RStudio Viewer
+animate(animated_ridge_plot, nframes = 100, fps = 10, width = 600, height = 400, renderer = gifski_renderer())
+
+
+```
+What Does This Plot Show?
+
+This animated ridge plot displays the distribution of bandwidth (log_payload, bytes per second) for different attack types over binned inter-arrival times (log_iat). It reveals how attack types differ in their bandwidth patterns across varying packet inter-arrival times.
+
+Animated Ridge Plot Explanation
+
+Purpose: The animated ridge plot visualizes how different attack types distribute their bandwidth (log_payload, bytes per second) across varying inter-arrival times (log_iat), helping to answer the question: "How do attack types show unique patterns across bandwidth and inter-arrival time?"
+
+X-Axis (Log of Bandwidth):
+
+Represents the amount of data transmitted in bytes per second (log-transformed).
+Higher values indicate data-intensive attacks (e.g., flooding), while lower values indicate stealthier attacks.
+Y-Axis (Attack Types):
+
+Each ridge corresponds to an attack type.
+The width and height of the ridges represent the distribution of bandwidth for that attack type.
+Animation (Inter-Arrival Time Bins):
+
+The plot animates through ranges of inter-arrival times, showing how attack characteristics evolve:
+Short inter-arrival times: Attacks rapidly sending packets (e.g., SYN floods).
+Long inter-arrival times: Slow, sustained attacks (e.g., reconnaissance).
+Color:
+
+Each attack type is assigned a unique color, making patterns easy to distinguish.
+High-Bandwidth Attacks:
+
+Ridges peaking toward the right (higher x-axis values) indicate high data loads, typical of flooding or brute-force attacks.
+Low-Bandwidth Attacks:
+
+Ridges peaking toward the left show stealthy or reconnaissance attacks transmitting minimal data.
+Temporal Behavior:
+
+Animation reveals how the intensity of attacks (bandwidth) changes across inter-arrival time bins.
+Attack Fingerprinting:
+
+Each attack type has a distinct ridge shape, creating a "fingerprint" that reflects its unique behavior.
+Clustering:
+
+Attack types with similar ridge shapes and patterns suggest shared behaviors or strategies.
+Insights for Network Defense:
+
+Identifying attacks with high bandwidth and short inter-arrival times helps detect flooding or DoS attacks.
+Observing unique bandwidth vs. inter-arrival patterns aids in attack classification and anomaly detection.
+Effectiveness of the Plot:
+
+Ridge plots effectively compare distributions across categories.
+Animation adds a dynamic dimension, making changes in patterns easier to observe.
+Conclusion:
+
+The plot highlights the distinct behaviors of attack types, enabling deeper understanding of their bandwidth and temporal characteristics. This can assist in creating targeted defenses for high-bandwidth attacks or stealthier ones with longer inter-arrival times.
+
+
+Inter Arrival time range- Extremely important to understand.
+
+Definition: Inter-arrival time represents the time gap between consecutive packets in a network flow.
+
+Short Inter-Arrival Times:
+
+Indicate rapid, bursty packet delivery.
+Common in aggressive attacks like DoS/DDoS or brute-force attacks designed to overwhelm targets.
+Long Inter-Arrival Times:
+
+Suggest slower, sustained packet delivery.
+Typical of reconnaissance attacks or stealthy data exfiltration, avoiding detection.
+Attack Intensity:
+
+Short inter-arrival times with high bandwidth: Intense, large-scale attacks (e.g., SYN floods).
+Long inter-arrival times with low bandwidth: Subtle, targeted probes.
+Temporal Behavior:
+
+Changes in inter-arrival time during an attack can show how the strategy evolves (e.g., fast bursts transitioning to slower, sustained traffic).
+Uniform vs. Irregular Patterns:
+
+Uniform times: Automated attacks or bots with predictable behavior.
+Irregular times: Human-driven attacks or ones mimicking legitimate traffic.
+Detection Utility:
+
+Short, consistent inter-arrival times can signal a coordinated flooding attack.
+Long, sporadic inter-arrival times might indicate stealth or reconnaissance activity.
+Behavioral Insights:
+
+Short inter-arrival times are “loud and fast” attacks aiming to disrupt services.
+Long inter-arrival times are “quiet and slow” attacks aiming to gather data or avoid detection.
+Intent of the Attack:
+
+Rapid inter-arrival: Disruption and system overload.
+Slower inter-arrival: Strategic probing or data theft.
+Conclusion:
+
+Analyzing inter-arrival time provides critical insights into the speed, intensity, and intent of an attack, aiding in early detection and response strategies.
+
+
+```{r}
+# Data transformation for bar chart race with logs
+bar_data <- data %>%
+  filter(flow_duration > 0 & payload_bytes_per_second > 0) %>%  # Ensure valid values
+  filter(!grepl("^(MQTT|NMAP|Thing_Speak|Wipro|metasploit_Brute_Force_SSH)", Attack_type, ignore.case = TRUE)) %>%  # Exclude unwanted attack types
+  group_by(Attack_type) %>%
+  summarize(total_bandwidth = sum(log10(payload_bytes_per_second + 1), na.rm = TRUE)) %>%  # Log-transform with small constant
+  arrange(desc(total_bandwidth)) %>%
+  mutate(rank = row_number())
+
+# Animated bar chart race with logs
+animated_bar <- ggplot(bar_data, aes(x = reorder(Attack_type, -total_bandwidth), y = total_bandwidth, fill = Attack_type)) +
+  geom_bar(stat = "identity", alpha = 0.8) +
+  geom_text(aes(label = round(total_bandwidth, 2)), hjust = -0.2, size = 4) +  # Add labels for clarity
+  coord_flip() +
+  expand_limits(y = 0) +  # Ensure y-axis starts at 0
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.1))) +  # Add padding to y-axis for visibility
+  labs(
+    title = "Log-Transformed Ranking of Attack Types by Bandwidth",
+    subtitle = "Top Attack Types by Bandwidth Contribution",
+    x = "Attack Type",
+    y = "Log of Total Bandwidth (bytes per second)",
+    fill = "Attack Type"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_text(size = 10)  # Increase font size for clarity
+  ) +
+  transition_states(rank, transition_length = 2, state_length = 1) +
+  ease_aes('linear')
+
+# Render animation
+animate(animated_bar, nframes = 100, fps = 10, width = 1200, height = 800, renderer = gifski_renderer())
+
+
+
+
+```
+
+```{r}
+# Data transformation for heatmap
+heatmap_data <- data %>%
+  filter(flow_duration > 0 & payload_bytes_per_second > 0) %>%
+  filter(!grepl("^(MQTT|NMAP|Thing_Speak|Wipro)", Attack_type, ignore.case = TRUE)) %>%
+  mutate(flow_bin = cut(flow_duration, breaks = 5)) %>%
+  group_by(Attack_type, flow_bin) %>%
+  summarize(mean_bandwidth = mean(log10(payload_bytes_per_second), na.rm = TRUE), .groups = "drop") %>%
+  melt(id.vars = c("Attack_type", "flow_bin"))
+
+# Animated heatmap
+animated_heatmap <- ggplot(heatmap_data, aes(x = variable, y = Attack_type, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  labs(
+    title = "Heatmap of Log-Transformed Metrics by Attack Type",
+    subtitle = "Flow Duration Bin: {closest_state}",
+    x = "Metric",
+    y = "Attack Type",
+    fill = "Log Value"
+  ) +
+  theme_minimal() +
+  transition_states(flow_bin, transition_length = 2, state_length = 1) +
+  ease_aes('linear')
+
+# Render animation
+animate(animated_heatmap, nframes = 100, fps = 10, width = 800, height = 600, renderer = gifski_renderer())
+```
+
+
+```{r}
+
+# Data transformation for heatmap
+heatmap_data <- data %>%
+  filter(flow_duration > 0 & payload_bytes_per_second > 0) %>%
+  filter(!grepl("^(MQTT|NMAP|Thing_Speak|Wipro)", Attack_type, ignore.case = TRUE)) %>%
+  mutate(flow_bin = cut(flow_duration, breaks = 5)) %>%
+  group_by(Attack_type, flow_bin) %>%
+  summarize(mean_bandwidth = mean(log10(payload_bytes_per_second), na.rm = TRUE), .groups = "drop") %>%
+  melt(id.vars = c("Attack_type", "flow_bin"))
+
+# Animated heatmap with log values and added legend
+animated_heatmap <- ggplot(heatmap_data, aes(x = flow_bin, y = Attack_type, fill = value)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(value, 2)), color = "black", size = 3) +  # Add dynamic text labels
+  scale_fill_gradient(
+    low = "lightblue",
+    high = "orange",
+    name = "Log Bandwidth\n(bytes/sec)",  # Legend title
+    labels = function(x) paste0("~10^", round(x, 1))  # Show log scale representation
+  ) +
+  labs(
+    title = "Heatmap of Log-Transformed Metrics by Attack Type",
+    subtitle = "Flow Duration Bin: {closest_state}",
+    x = "Flow Duration Bin",
+    y = "Attack Type",
+    fill = "Log Value"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),  # Remove x-axis numeric values
+    axis.ticks.x = element_blank()  # Remove x-axis ticks
+  ) +
+  transition_states(flow_bin, transition_length = 2, state_length = 1) +
+  ease_aes('linear')
+
+# Render animation
+animate(animated_heatmap, nframes = 100, fps = 5, width = 800, height = 600, renderer = gifski_renderer())
+
+
+```
+
+
+
+
+
+
+
