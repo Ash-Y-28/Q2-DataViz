@@ -6,7 +6,9 @@ library(gganimate)
 library(dplyr)
 library(reshape2)
 library(stringr)
-library(viridis)
+library(RColorBrewer)
+
+data <- read_csv(here("data.csv"))
 
 # Define UI
 ui <- fluidPage(
@@ -71,8 +73,8 @@ ui <- fluidPage(
       sidebarLayout(
         sidebarPanel(
           helpText("Explore bandwidth variations across attack types over flow duration."),
-          sliderInput("fps_time", "Frames Per Second", min = 1, max = 30, value = 10),
-          sliderInput("nframes_time", "Number of Frames", min = 100, max = 500, value = 500)
+          sliderInput("fps_time", "Frames Per Second", min = 1, max = 30, value = 15),
+          sliderInput("nframes_time", "Number of Frames", min = 100, max = 500, value = 200)
         ),
         mainPanel(
           imageOutput("animatedTimeSeries")
@@ -131,7 +133,7 @@ server <- function(input, output, session) {
       group_by(Attack_type) %>%
       summarize(total_bandwidth = sum(log10(payload_bytes_per_second + 1), na.rm = TRUE)) %>%
       arrange(desc(total_bandwidth)) %>%
-      mutate(rank = row_number())
+      mutate(rank = row_number(), Attack_type = as.factor(Attack_type))  # Ensure Attack_type is a factor
 
     animated_bar <- ggplot(bar_data, aes(x = reorder(Attack_type, -total_bandwidth), y = total_bandwidth, fill = Attack_type)) +
       geom_bar(stat = "identity", alpha = 0.8) +
@@ -165,7 +167,7 @@ server <- function(input, output, session) {
     heatmap_data <- data %>%
       filter(flow_duration > 0 & payload_bytes_per_second > 0) %>%
       filter(!grepl("^(MQTT|NMAP|Thing_Speak|Wipro)", Attack_type, ignore.case = TRUE)) %>%
-      mutate(flow_bin = cut(flow_duration, breaks = 5)) %>%
+      mutate(flow_bin = cut(flow_duration, breaks = 5), Attack_type = as.factor(Attack_type)) %>%
       group_by(Attack_type, flow_bin) %>%
       summarize(mean_bandwidth = mean(log10(payload_bytes_per_second), na.rm = TRUE), .groups = "drop") %>%
       melt(id.vars = c("Attack_type", "flow_bin"))
@@ -206,8 +208,11 @@ server <- function(input, output, session) {
       filter(flow_duration > 0,
              !str_starts(Attack_type, regex("^(MQTT|NMAP|Thing_Speak|Wipro)", ignore_case = TRUE))) %>%
       group_by(Attack_type) %>%
-      mutate(log_flow_duration = log10(flow_duration),
-             log_payload = log10(payload_bytes_per_second + 1))
+      mutate(
+        log_flow_duration = log10(flow_duration),
+        log_payload = log10(payload_bytes_per_second + 1),
+        Attack_type = as.factor(Attack_type)  # Ensure Attack_type is a factor
+      )
 
     animated_plot <- ggplot(data_scatter, aes(x = log_flow_duration,
                                               y = log_payload,
@@ -229,13 +234,16 @@ server <- function(input, output, session) {
     list(src = anim_file, contentType = "image/gif", width = 400, height = 400)
   }, deleteFile = TRUE)
 
-  # Time-series animation
+  # Time-series animation (updated)
   output$animatedTimeSeries <- renderImage({
     time_data <- data %>%
       filter(payload_bytes_per_second > 0 & flow_duration > 0 & flow_duration <= 100) %>%
       filter(!grepl("^(MQTT|NMAP|Thing_Speak|Wipro)", Attack_type, ignore.case = TRUE)) %>%
+      group_by(Attack_type) %>%
+      slice(seq(1, n(), by = 5)) %>%  # Downsample data (every 5th point)
       mutate(
-        log_bandwidth = log10(payload_bytes_per_second)
+        log_bandwidth = log10(payload_bytes_per_second),  # Log-transform bandwidth
+        Attack_type = as.factor(Attack_type)  # Convert Attack_type to a factor
       )
 
     animated_flow_lines <- ggplot(time_data, aes(x = flow_duration, y = log_bandwidth, color = Attack_type, group = Attack_type)) +
@@ -247,19 +255,19 @@ server <- function(input, output, session) {
         y = "Log Bandwidth (bytes per second)",
         color = "Attack Type"
       ) +
-      scale_color_viridis_d() +
+      scale_color_brewer(palette = "Set1") +  # Use a distinct color palette
       theme_minimal() +
       theme(
         axis.text.x = element_text(angle = 45, hjust = 1),
         legend.position = "bottom"
       ) +
-      coord_cartesian(xlim = c(0, 50)) +
+      coord_cartesian(xlim = c(0, 100)) +
       transition_reveal(flow_duration)
 
     anim_file <- tempfile(fileext = ".gif")
-    animate(animated_flow_lines, nframes = input$nframes_time, fps = input$fps_time, width = 1200, height = 800, renderer = gifski_renderer(anim_file))
+    animate(animated_flow_lines, nframes = input$nframes_time, fps = input$fps_time, width = 800, height = 600, renderer = gifski_renderer(anim_file))
 
-    list(src = anim_file, contentType = "image/gif", width = 1200, height = 800)
+    list(src = anim_file, contentType = "image/gif", width = 800, height = 600)
   }, deleteFile = TRUE)
 }
 
