@@ -5,7 +5,8 @@ library(ggridges)
 library(gganimate)
 library(dplyr)
 library(reshape2)
-library(stringr) # For str_starts()
+library(stringr)
+library(viridis)
 
 # Define UI
 ui <- fluidPage(
@@ -64,6 +65,19 @@ ui <- fluidPage(
           imageOutput("animatedScatterPlot")
         )
       )
+    ),
+    tabPanel(
+      "Time-Series Animation",
+      sidebarLayout(
+        sidebarPanel(
+          helpText("Explore bandwidth variations across attack types over flow duration."),
+          sliderInput("fps_time", "Frames Per Second", min = 1, max = 30, value = 10),
+          sliderInput("nframes_time", "Number of Frames", min = 100, max = 500, value = 500)
+        ),
+        mainPanel(
+          imageOutput("animatedTimeSeries")
+        )
+      )
     )
   )
 )
@@ -79,7 +93,8 @@ server <- function(input, output, session) {
       mutate(
         log_payload = log10(payload_bytes_per_second + 1),
         log_iat = log10(flow_iat.avg + 1),
-        iat_bin = cut(log_iat, breaks = 5)
+        iat_bin = cut(log_iat, breaks = 5),
+        Attack_type = as.factor(Attack_type)  # Ensure Attack_type is a factor
       )
 
     ridge_plot <- ggplot(data_ridge, aes(x = log_payload, y = Attack_type, fill = Attack_type)) +
@@ -212,6 +227,39 @@ server <- function(input, output, session) {
     animate(animated_plot, nframes = input$nframes_scatter, fps = input$fps_scatter, width = 400, height = 400, renderer = gifski_renderer(anim_file))
 
     list(src = anim_file, contentType = "image/gif", width = 400, height = 400)
+  }, deleteFile = TRUE)
+
+  # Time-series animation
+  output$animatedTimeSeries <- renderImage({
+    time_data <- data %>%
+      filter(payload_bytes_per_second > 0 & flow_duration > 0 & flow_duration <= 100) %>%
+      filter(!grepl("^(MQTT|NMAP|Thing_Speak|Wipro)", Attack_type, ignore.case = TRUE)) %>%
+      mutate(
+        log_bandwidth = log10(payload_bytes_per_second)
+      )
+
+    animated_flow_lines <- ggplot(time_data, aes(x = flow_duration, y = log_bandwidth, color = Attack_type, group = Attack_type)) +
+      geom_line(size = 1, alpha = 0.8) +
+      labs(
+        title = "Bandwidth Variations Across Attack Types",
+        subtitle = "Flow Duration: {frame_along}",
+        x = "Flow Duration",
+        y = "Log Bandwidth (bytes per second)",
+        color = "Attack Type"
+      ) +
+      scale_color_viridis_d() +
+      theme_minimal() +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "bottom"
+      ) +
+      coord_cartesian(xlim = c(0, 50)) +
+      transition_reveal(flow_duration)
+
+    anim_file <- tempfile(fileext = ".gif")
+    animate(animated_flow_lines, nframes = input$nframes_time, fps = input$fps_time, width = 1200, height = 800, renderer = gifski_renderer(anim_file))
+
+    list(src = anim_file, contentType = "image/gif", width = 1200, height = 800)
   }, deleteFile = TRUE)
 }
 

@@ -369,7 +369,7 @@ animated_flow_lines <- ggplot(data, aes(x = flow_duration, y = log_bandwidth, co
     axis.text.x = element_text(angle = 45, hjust = 1),
     legend.position = "bottom"
   ) +
-  coord_cartesian(xlim = c(0, 100)) +  # Manually adjust x-axis range
+  coord_cartesian(xlim = c(0, 50)) +  # Manually adjust x-axis range
   transition_reveal(flow_duration)  # Gradually reveal the lines along flow_duration
 
 # Render animation with increased frames for smoother drawing
