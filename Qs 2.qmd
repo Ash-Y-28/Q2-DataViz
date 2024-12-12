@@ -338,6 +338,49 @@ animate(animated_heatmap, nframes = 100, fps = 5, width = 800, height = 600, ren
 
 ```
 
+```{r}
+# The boss of all plots...
+
+library(dplyr)
+library(ggplot2)
+library(gganimate)
+
+# Data preparation using flow_duration as the x-axis
+data <- data %>%
+  filter(payload_bytes_per_second > 0 & flow_duration > 0 & flow_duration <= 100) %>%  # Filter valid data and limit x-axis range
+  filter(!grepl("^(MQTT|NMAP|Thing_Speak|Wipro)", Attack_type, ignore.case = TRUE)) %>%  # Exclude unwanted attacks
+  mutate(
+    log_bandwidth = log10(payload_bytes_per_second)  # Log-transform bandwidth
+  )
+
+# Animated time-series plot using flow_duration
+animated_flow_lines <- ggplot(data, aes(x = flow_duration, y = log_bandwidth, color = Attack_type, group = Attack_type)) +
+  geom_line(size = 1, alpha = 0.8) +  # Draw lines for each attack type
+  labs(
+    title = "Bandwidth Variations Across Attack Types",
+    subtitle = "Flow Duration: {frame_along}",
+    x = "Flow Duration",
+    y = "Log Bandwidth (bytes per second)",
+    color = "Attack Type"
+  ) +
+  scale_color_viridis_d() +  # Use a distinct color palette
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"
+  ) +
+  coord_cartesian(xlim = c(0, 100)) +  # Manually adjust x-axis range
+  transition_reveal(flow_duration)  # Gradually reveal the lines along flow_duration
+
+# Render animation with increased frames for smoother drawing
+animate(animated_flow_lines, nframes = 500, fps = 10, width = 1200, height = 800, renderer = gifski_renderer())
+
+
+
+
+
+
+```
 
 
 
