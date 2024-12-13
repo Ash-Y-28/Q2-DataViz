@@ -8,58 +8,119 @@ library(ggridges)
 library(here)
 library(readr)
 library(shinythemes)
+library(shinycssloaders)
 
 # Load the data
 data <- read_csv(here("data.csv"))
 
 # Define UI
 ui <- fluidPage(
-  theme = shinytheme("cosmo"),  # Pick a theme like "cerulean", "cosmo", etc.
-  titlePanel("Interactive Animated Visualizations"),
+  theme = shinytheme("darkly"),  # Applying the chosen theme
+
+  tags$head(tags$style(HTML("
+
+    .hover-image {
+      transition: all 0.3s ease-in-out;
+      box-shadow: 0px 0px 0px transparent;
+    }
+
+    .hover-image:hover {
+      transform: translateY(-20px);
+      box-shadow: 0px 15px 30px rgba(50, 205, 50, 0.8);
+    }
+
+    .hover-text {
+      transition: all 0.3s ease-in-out;
+      text-shadow: 0px 0px 0px transparent;
+      color: white; /* Default color */
+    }
+
+    .hover-text:hover {
+      transform: translateY(-5px); /* Lift the text up */
+      text-shadow: 2px 2px 5px rgba(0, 255, 0, 0.5); /* Green shadow */
+      color: #34C759; /* Change text color to green */
+    }
+  "))),
+
+  titlePanel(
+    div("Interactive Animated Visualizations", class = "hover-text")
+  ),
 
   # Add tabs for multiple visualizations
   tabsetPanel(
     tabPanel(
       "Scatter Plot Animation",
-      sidebarLayout(
-        sidebarPanel(
-          helpText("Discover unique patterns of attacks using scatter plot animation.")
-        ),
-        mainPanel(
-          imageOutput("animatedScatterPlot")
+      fluidRow(
+        column(
+          width = 12,
+          style = "display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 50px;",
+          div(
+            class = "hover-text",
+            style = "text-align: center; margin-bottom: 20px;",
+            h4("Discover unique patterns of attacks using scatter plot animation.")
+          ),
+          div(
+            class = "hover-image",
+            style = "text-align: center; margin-top: 50px;",
+            imageOutput("animatedScatterPlot", height = "500px")
+          )
         )
       )
     ),
     tabPanel(
       "Ridge Plot Animation",
-      sidebarLayout(
-        sidebarPanel(
-          helpText("Visualize the evolving bandwidth distribution by attack type.")
-        ),
-        mainPanel(
-          imageOutput("animatedRidgePlot")
+      fluidRow(
+        column(
+          width = 12,
+          div(
+            class = "hover-text",
+            style = "display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 50px;",
+            h4("Visualize the evolving bandwidth distribution by attack type.",
+               style = "text-align: center; margin-bottom: 20px;"),
+            div(
+              class = "hover-image",
+              style = "text-align: center; margin-top: 50px;",
+              imageOutput("animatedRidgePlot", height = "500px")
+            )
+          )
         )
       )
     ),
     tabPanel(
       "Bar Chart Race Animation",
-      sidebarLayout(
-        sidebarPanel(
-          helpText("View the ranking of attack types by bandwidth over time.")
-        ),
-        mainPanel(
-          imageOutput("animatedBarChart")
+      fluidRow(
+        column(
+          width = 12,
+          div(
+            class = "hover-text",
+            style = "display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 50px;",
+            h4("View the ranking of attack types by bandwidth over time.",
+               style = "text-align: center; margin-bottom: 20px;"),
+            div(
+              class = "hover-image",
+              style = "text-align: center; margin-top: 50px;",
+              imageOutput("animatedBarChart", height = "500px")
+            )
+          )
         )
       )
     ),
     tabPanel(
       "Time-Series Animation",
-      sidebarLayout(
-        sidebarPanel(
-          helpText("Explore bandwidth variations across attack types over flow duration.")
-        ),
-        mainPanel(
-          imageOutput("animatedTimeSeries")
+      fluidRow(
+        column(
+          width = 12,
+          div(
+            class = "hover-text",
+            style = "display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 50px;",
+            h4("Explore bandwidth variations across attack types over flow duration.",
+               style = "text-align: center; margin-bottom: 20px;"),
+            div(
+              class = "hover-image",
+              style = "text-align: center; margin-top: 50px;",
+              imageOutput("animatedTimeSeries", height = "500px")
+            )
+          )
         )
       )
     )
@@ -68,8 +129,6 @@ ui <- fluidPage(
 
 # Define server logic
 server <- function(input, output, session) {
-
-  set.seed(123)
 
   # Scatter plot animation
   output$animatedScatterPlot <- renderImage({
@@ -89,14 +148,13 @@ server <- function(input, output, session) {
            y = "Log of Payload (bytes per second)") +
       theme_minimal() +
       theme(legend.position = "bottom") +
-      scale_color_brewer(palette = "Set1") +
       transition_states(Attack_type, transition_length = 2, state_length = 1) +
       enter_fade() +
       exit_shrink() +
       ease_aes('linear')
 
     anim_file <- tempfile(fileext = ".gif")
-    animate(animated_plot, nframes = 150, fps = 15, width = 800, height = 600, renderer = gifski_renderer(anim_file))
+    animate(animated_plot, nframes = 75, fps = 10, width = 800, height = 600, renderer = gifski_renderer(anim_file))
 
     list(src = anim_file, contentType = "image/gif", width = 800, height = 600)
   }, deleteFile = TRUE)
@@ -119,7 +177,6 @@ server <- function(input, output, session) {
         y = "Attack Types"
       ) +
       theme_minimal() +
-      scale_fill_brewer(palette = "Set1") +
       theme(legend.position = "none")
 
     animated_ridge_plot <- ridge_plot +
@@ -132,7 +189,7 @@ server <- function(input, output, session) {
       exit_fade()
 
     anim_file <- tempfile(fileext = ".gif")
-    animate(animated_ridge_plot, nframes = 150, fps = 15, width = 800, height = 600, renderer = gifski_renderer(anim_file))
+    animate(animated_ridge_plot, nframes = 75, fps = 10, width = 800, height = 600, renderer = gifski_renderer(anim_file))
 
     list(src = anim_file, contentType = "image/gif", width = 800, height = 600)
   }, deleteFile = TRUE)
@@ -149,10 +206,10 @@ server <- function(input, output, session) {
 
     animated_bar <- ggplot(bar_data, aes(x = reorder(Attack_type, -total_bandwidth), y = total_bandwidth, fill = Attack_type)) +
       geom_bar(stat = "identity", alpha = 0.8) +
-      geom_text(aes(label = round(total_bandwidth, 2)), hjust = -0.2, size = 4) +  # Adjust hjust to move text
+      geom_text(aes(label = round(total_bandwidth, 2)), hjust = -0.2, size = 4) +
       coord_flip() +
-      scale_y_continuous(expand = expansion(mult = c(0.05, 0.2))) +  # Add extra space on the y-axis
-      scale_fill_brewer(palette = "Set1") +
+      expand_limits(y = c(0, max(bar_data$total_bandwidth) * 1.1)) +
+      scale_y_continuous(expand = expansion(mult = c(0.05, 0.1))) +
       labs(
         title = "Log-Transformed Ranking of Attack Types by Bandwidth",
         subtitle = "Top Attack Types by Bandwidth Contribution",
@@ -169,7 +226,7 @@ server <- function(input, output, session) {
       ease_aes('linear')
 
     anim_file <- tempfile(fileext = ".gif")
-    animate(animated_bar, nframes = 150, fps = 15, width = 800, height = 600, renderer = gifski_renderer(anim_file))
+    animate(animated_bar, nframes = 75, fps = 10, width = 800, height = 600, renderer = gifski_renderer(anim_file))
 
     list(src = anim_file, contentType = "image/gif", width = 800, height = 600)
   }, deleteFile = TRUE)
@@ -180,7 +237,7 @@ server <- function(input, output, session) {
       filter(payload_bytes_per_second > 0 & flow_duration > 0 & flow_duration <= 100) %>%
       filter(!str_starts(Attack_type, regex("^NMAP", ignore_case = TRUE))) %>%
       group_by(Attack_type) %>%
-      slice(seq(1, n(), by = 5)) %>%
+      slice(seq(1, n(), by = 5)) %>%  # Downsample data
       mutate(log_bandwidth = log10(payload_bytes_per_second))
 
     animated_flow_lines <- ggplot(time_data, aes(x = flow_duration, y = log_bandwidth, color = Attack_type, group = Attack_type)) +
@@ -202,7 +259,7 @@ server <- function(input, output, session) {
       transition_reveal(flow_duration)
 
     anim_file <- tempfile(fileext = ".gif")
-    animate(animated_flow_lines, nframes = 150, fps = 15, width = 800, height = 600, renderer = gifski_renderer(anim_file))
+    animate(animated_flow_lines, nframes = 75, fps = 10, width = 800, height = 600, renderer = gifski_renderer(anim_file))
 
     list(src = anim_file, contentType = "image/gif", width = 800, height = 600)
   }, deleteFile = TRUE)

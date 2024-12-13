@@ -311,44 +311,6 @@ animate(animated_flow_lines, nframes = 200, fps = 15, width = 800, height = 600,
 
 ```
 
-```{r}
-# Data transformation for heatmap
-heatmap_data <- data %>%
-  filter(flow_duration > 0 & payload_bytes_per_second > 0) %>%
-  filter(!grepl("^(MQTT|NMAP|Thing_Speak|Wipro)", Attack_type, ignore.case = TRUE)) %>%
-  mutate(flow_bin = cut(flow_duration, breaks = 5)) %>%
-  group_by(Attack_type, flow_bin) %>%
-  summarize(mean_bandwidth = mean(log10(payload_bytes_per_second), na.rm = TRUE), .groups = "drop") %>%
-  melt(id.vars = c("Attack_type", "flow_bin"))
-
-# Animated heatmap with log values and added legend
-animated_heatmap <- ggplot(heatmap_data, aes(x = flow_bin, y = Attack_type, fill = value)) +
-  geom_tile(color = "white") +
-  geom_text(aes(label = round(value, 2)), color = "black", size = 3) +  # Add dynamic text labels
-  scale_fill_gradient(
-    low = "lightblue",
-    high = "orange",
-    name = "Log Bandwidth\n(bytes/sec)",  # Legend title
-    labels = function(x) paste0("~10^", round(x, 1))  # Show log scale representation
-  ) +
-  labs(
-    title = "Heatmap of Log-Transformed Metrics by Attack Type",
-    subtitle = "Flow Duration Bin: {closest_state}",
-    x = "Flow Duration Bin",
-    y = "Attack Type",
-    fill = "Log Value"
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_blank(),  # Remove x-axis numeric values
-    axis.ticks.x = element_blank()  # Remove x-axis ticks
-  ) +
-  transition_states(flow_bin, transition_length = 2, state_length = 1) +
-  ease_aes('linear')
-
-# Render animation
-animate(animated_heatmap, nframes = 100, fps = 5, width = 800, height = 600, renderer = gifski_renderer())
-```
 
 
 
